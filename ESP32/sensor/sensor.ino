@@ -1,7 +1,5 @@
-//#define UseBTLE
-#define UseWiFi
 //#define UseWiFiLR
-#define UseSerial
+//#define UseSerial
 
 #define SENSOR_ID 1;
 
@@ -12,31 +10,15 @@
 #include <LinkedList.h>
 #include <math.h>
 
-/* Begin BTLE */
-#ifdef UseBTLE
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
-#endif
-/* End BTLE */
-
-/* Begin ESP-NOW */
-#ifdef UseWiFi
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
-#endif
-/* End ESP-NOW */
 
 /* Begin BMP390 */
-//Working I2C = SDA=8, SCL=9, Blue=GPIO7, Yellow=GPIO9
-//#define I2C_SDA 7
-//#define I2C_SCL 9
+//Working I2C = SDA=8, SCL=9, Blue=GPI20, Yellow=GPI21
 
 #define I2C_SDA 20
 #define I2C_SCL 21
-
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 
@@ -197,8 +179,8 @@ float readHeight() {
     adjustedAltitudeMeters = measuredAltitudeMeters - currentAltitudeOffset;
   }
 
+#ifdef Debug
 #ifdef UseSerial
-/*
   Serial.print("MeasuredAltMeters:");
   Serial.print(measuredAltitudeMeters);
   Serial.print(",MeasuredAltFeet:");
@@ -207,113 +189,22 @@ float readHeight() {
   Serial.print(adjustedAltitudeMeters);
   Serial.print(",CurrentAltitudeOffset:");
   Serial.print(currentAltitudeOffset);
-  */
+#endif
 #endif
 
   float adjustedAltitudeFeet = 3.28084 * adjustedAltitudeMeters;
 
+#ifdef Debug
 #ifdef UseSerial
-/*
   Serial.print(",AdjustedAltitudeFeet:");
   Serial.println(adjustedAltitudeFeet);
-  */
+#endif
 #endif
 
   return adjustedAltitudeFeet;
 }
 /* End BMP390 */
 
-/* Begin BLE */
-#ifdef UseBTLE
-BLEServer *pServer = NULL;
-BLECharacteristic *pCharacteristic = NULL;
-BLEDescriptor *pDescr;
-BLE2902 *pBLE2902;
-
-int bleServerCount = 0;
-
-#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-
-class MyServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *pServer) {
-    bleServerCount++;
-#ifdef UseSerial
-    Serial.println("New server connected!");
-    Serial.print("Servers: ");
-    Serial.println(bleServerCount);
-#endif
-
-    //TODO move to a timer after 500ms?
-    BLEDevice::startAdvertising();
-  };
-
-  void onDisconnect(BLEServer *pServer) {
-    bleServerCount--;
-
-#ifdef UseSerial
-    Serial.println("Server disconnected!");
-    Serial.print("Servers: ");
-    Serial.println(bleServerCount);
-#endif
-  }
-};
-
-void bleInit() {
-  // Create the BLE Device
-  BLEDevice::init("RocketSensor");
-
-  // Create the BLE Server
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
-
-  // Create the BLE Service
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-
-  // Create a BLE Characteristic
-  pCharacteristic = pService->createCharacteristic(
-    CHARACTERISTIC_UUID,
-    BLECharacteristic::PROPERTY_NOTIFY);
-
-  // Create a BLE Descriptor
-
-  pDescr = new BLEDescriptor((uint16_t)0x2901);
-  pDescr->setValue("A very interesting variable");
-  pCharacteristic->addDescriptor(pDescr);
-
-  pBLE2902 = new BLE2902();
-  pBLE2902->setNotifications(true);
-  pCharacteristic->addDescriptor(pBLE2902);
-
-  // Start the service
-  pService->start();
-
-  // Start advertising
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
-  BLEDevice::startAdvertising();
-#ifdef UseSerial
-  Serial.println("Waiting a client connection to notify...");
-#endif
-}
-
-void bleLoop() {
-  if (bleServerCount > 0) {
-    float height = readHeight();
-
-    pCharacteristic->setValue(height);
-    pCharacteristic->notify();
-  }
-
-  delay(50);  // careful or the bluetooth stack will go into congestion
-}
-#endif
-/* End BLE */
-
-/* Begin ESP-NOW */
-#ifdef UseWiFi
 const int wifiChannel = 4;
 
 // Structure example to send data
@@ -504,9 +395,11 @@ void deletePeer() {
 
 unsigned int wifiSendFailures = 0;
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+#ifdef Debug
 #ifdef UseSerial
-//Serial.print("Last Packet Send Status: ");
-//Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  Serial.print("Last Packet Send Status: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+#endif
 #endif
 
   if (status == ESP_NOW_SEND_SUCCESS) {
@@ -603,8 +496,6 @@ void espNowLoop() {
     delay(1000);
   }
 }
-#endif
-/* End ESP-NOW */
 
 void setup() {
   //TODO CHRIS
@@ -621,22 +512,9 @@ void setup() {
 #endif
 
   bmp390Init();
-
-#ifdef UseBTLE
-  bleInit();
-#endif
-
-#ifdef UseWiFi
   espNowInit();
-#endif
 }
 
 void loop() {
-#ifdef UseBTLE
-  bleLoop();
-#endif
-
-#ifdef UseWiFi
   espNowLoop();
-#endif
 }
